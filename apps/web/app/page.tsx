@@ -20,11 +20,13 @@ const App = () => {
     };
   }, []);
 
+  const CHUNK_SIZE = 65536;
+
   const startStream = async () => {
     try {
       const mediaStream = await navigator.mediaDevices.getUserMedia({
-        video: true,
-        audio: true,
+        video:true,
+        audio:true
       });
 
       if (videoRef.current) {
@@ -32,10 +34,26 @@ const App = () => {
       }
 
       const mediaRecorder = new MediaRecorder(mediaStream);
-
-      mediaRecorder.ondataavailable = (event) => {
+      
+      let buffer = new Uint8Array(0);
+      
+      mediaRecorder.ondataavailable = async (event) => {
         if (event.data.size > 0 && socket?.readyState === WebSocket.OPEN) {
-          socket.send(event.data);
+          const chunk = await event.data.arrayBuffer();
+          const chunkArray = new Uint8Array(chunk);
+          
+          // Append to our existing buffer
+          const newBuffer = new Uint8Array(buffer.length + chunkArray.length);
+          newBuffer.set(buffer);
+          newBuffer.set(chunkArray, buffer.length);
+          buffer = newBuffer;
+          
+          // Send chunks of CHUNK_SIZE
+          while (buffer.length >= CHUNK_SIZE) {
+            const chunkToSend = buffer.slice(0, CHUNK_SIZE);
+            socket.send(chunkToSend);
+            buffer = buffer.slice(CHUNK_SIZE);
+          }
         }
       };
 

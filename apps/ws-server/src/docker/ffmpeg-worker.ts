@@ -4,6 +4,8 @@ const docker = new Docker();
 
 export async function spawnFFmpegContainer(streamKey: string) {
     try {
+        console.log(`Setting up FFmpeg container for stream key: ${streamKey}`);
+        
         await new Promise((resolve, reject) => {
             docker.pull('jrottenberg/ffmpeg:4.1-alpine', (err: Error, stream: NodeJS.ReadableStream) => {
                 if (err) return reject(err);
@@ -16,41 +18,76 @@ export async function spawnFFmpegContainer(streamKey: string) {
 
         const container = await docker.createContainer({
             Image: 'jrottenberg/ffmpeg:4.1-alpine',
-            ExposedPorts: {
-                '5732/tcp': {}
-            },
             Cmd: [
-                "-i", "-",                 
-                "-c:v", "libx264",         
-                "-preset", "veryfast",    
-                "-tune", "zerolatency",   
-                "-f", "flv",              
-                `rtmp://127.0.0.1:5732/live/${streamKey}`
+                "-flags:v", "+global_header",
+                "-re",
+                "-f", "webm",
+                "-i", "pipe:0",
+                "-c:v", "libx264",
+                "-preset", "ultrafast",
+                "-tune", "zerolatency",
+                "-profile:v", "baseline",
+                "-x264-params", "keyint=30:min-keyint=30", // Reduce keyframe interval
+                "-bufsize", "1000k",
+                "-maxrate", "600k", // Reduce output bitrate
+                "-g", "30",
+                "-c:a", "aac",
+                "-ac", "2",
+                "-ar", "44100",
+                "-f", "flv",
+                `rtmp://host.docker.internal:1935/live/test`
             ],
             AttachStdin: true,
             OpenStdin: true,
-            StdinOnce: false,             
+            StdinOnce: false,
             Tty: false,
-            HostConfig: {     
-                NetworkMode: "host",       
+            HostConfig: {
+                NetworkMode: "host",
             }
         });
 
         await container.start();
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        console.log(`FFmpeg container started for stream key: ${streamKey}`);
 
         const stream = await container.attach({
             stream: true,
             stdin: true,
             stdout: true,
+            stderr: true,
+            hijack: true
+        });
+
+        // Log container output for debugging
+        container.logs({
+            follow: true,
+            stdout: true,
             stderr: true
+        }, (err, stream) => {
+            if (err) {
+                console.error(`Error getting logs: ${err.message}`);
+                return;
+            }
+            stream?.on('data', (chunk) => {
+                console.log(`[FFmpeg ${streamKey}]: ${chunk.toString()}`);
+            });
+
+            stream?.on('error', (err) => {
+                console.error(`[FFmpeg Error] ${err}`);
+            });
+            
+            stream?.on('end', () => {
+                console.log('[FFmpeg] Stream ended');
+            });
         });
 
         return {
             container,
-            ffmpegStream: stream
+            ffmpegStream: stream,
+            streamKey
         };
     } catch (error) {
-        console.log('Failed to spawn FFmpeg container:', error);
+        console.error('Failed to spawn FFmpeg container:', error);
         throw error;
     }
 }
