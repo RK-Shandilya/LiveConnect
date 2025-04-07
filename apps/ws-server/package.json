@@ -1,0 +1,25 @@
+{
+  "name": "ws-server",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "devDependencies": {
+    "@repo/typescript-config": "workspace:*",
+    "@types/express": "^5.0.1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "@types/dockerode": "^3.3.37",
+    "@types/node-media-server": "^2.3.7",
+    "@types/ws": "^8.18.1",
+    "dockerode": "^4.0.5",
+    "express": "^5.1.0",
+    "node-media-server": "^4.0.12",
+    "ws": "^8.18.1"
+  }
+}
